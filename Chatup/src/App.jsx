@@ -6,7 +6,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 // Import our new page components
 import Home from './components/Home';
 import Login from './components/Login';
-import Chatbot from './components/Chatbot';
+import ChatRoom from './components/ChatRoom'; // Will be ChatRoom.jsx later
 
 // Import AuthProvider and useAuth from our context
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -26,8 +26,6 @@ const PrivateRoute = ({ children }) => {
   }
 
   // If user is not logged in, redirect to login page
-  // `replace` prop ensures the login page replaces the current entry in history,
-  // preventing the user from going back to the protected page with the browser's back button.
   return currentUser ? children : <Navigate to="/login" replace />;
 };
 
@@ -42,12 +40,12 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
 
-          {/* Protected route for the chatbot */}
+          {/* Protected route for the ChatRoom (will be chat room) */}
           <Route
             path="/chat"
             element={
               <PrivateRoute>
-                <Chatbot />
+                <ChatRoom /> {/* This will render our ChatRoom component */}
               </PrivateRoute>
             }
           />

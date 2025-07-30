@@ -1,46 +1,66 @@
 // src/components/Login.jsx
-// User login component with a sleek, dark theme, now integrated with AuthContext.
+// User login component with Firebase Authentication integration.
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom'; // Import useNavigate
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext'; // Import useAuth hook
 
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const { login } = useAuth(); // Get the login function from AuthContext
-  const navigate = useNavigate(); // Get the navigate function from React Router
+  const [isRegistering, setIsRegistering] = useState(false); // State to toggle between login/register form
+  const { login, register } = useAuth(); // Get login and register functions from AuthContext
+  const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
-    e.preventDefault(); // Prevent default form submission behavior
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     setError(''); // Clear any previous error messages
 
-    // Basic client-side validation
-    if (!email || !password) {
-      setError('Please enter both email and password.');
-      return;
-    }
-
-    // --- Simulate a simple login for demonstration ---
-    // In a real application, you would make an API call here
-    // to your backend authentication service (e.g., Firebase Auth, Node.js API).
-    // Example with a dummy user:
-    if (email === 'user@example.com' && password === 'password123') {
-      // If credentials match, call the login function from AuthContext
-      // Pass a dummy user object. In a real app, this would be user data from your backend.
-      login({ id: 'user123', email: email, name: 'Chat User' });
-      navigate('/chat'); // Redirect to the chat page upon successful login
-    } else {
-      // Display an error message for invalid credentials
-      setError('Invalid email or password. Try: user@example.com / password123');
+    try {
+      if (isRegistering) {
+        // Attempt to register the user
+        await register(email, password);
+        alert('Registration successful! You are now logged in.'); // Simple alert for success
+      } else {
+        // Attempt to log in the user
+        await login(email, password);
+      }
+      navigate('/chat'); // Redirect to the chat page upon successful login/registration
+    } catch (err) {
+      // Handle Firebase authentication errors
+      let errorMessage = 'An unexpected error occurred. Please try again.';
+      if (err.code) {
+        switch (err.code) {
+          case 'auth/invalid-email':
+            errorMessage = 'Invalid email address format.';
+            break;
+          case 'auth/user-disabled':
+            errorMessage = 'This user account has been disabled.';
+            break;
+          case 'auth/user-not-found':
+          case 'auth/wrong-password':
+            errorMessage = 'Invalid email or password.';
+            break;
+          case 'auth/email-already-in-use':
+            errorMessage = 'This email is already registered. Try logging in.';
+            break;
+          case 'auth/weak-password':
+            errorMessage = 'Password should be at least 6 characters.';
+            break;
+          default:
+            errorMessage = err.message;
+        }
+      }
+      setError(errorMessage);
     }
   };
 
   return (
     <div className="login-container">
       <form onSubmit={handleSubmit} className="login-form">
-        <h2 className="login-title">Login to Chat</h2>
-        {/* Display error message if present */}
+        <h2 className="login-title">
+          {isRegistering ? 'Register Account' : 'Login to Chat'}
+        </h2>
         {error && (
           <p className="error-message">
             {error}
@@ -51,10 +71,10 @@ function Login() {
           <input
             type="email"
             id="email"
-            value={email} // Controlled component for email input
+            value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="form-input"
-            placeholder="user@example.com"
+            placeholder="Enter your email"
             required
           />
         </div>
@@ -63,18 +83,34 @@ function Login() {
           <input
             type="password"
             id="password"
-            value={password} // Controlled component for password input
+            value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="form-input"
-            placeholder="password123"
+            placeholder="Enter your password"
             required
           />
         </div>
         <button type="submit" className="button button-primary button-full-width">
-          Login
+          {isRegistering ? 'Register' : 'Login'}
         </button>
         <p className="login-signup-link">
-          Don't have an account?{' '}
+          {isRegistering ? (
+            <>
+              Already have an account?{' '}
+              <span onClick={() => setIsRegistering(false)} className="text-link cursor-pointer">
+                Login
+              </span>
+            </>
+          ) : (
+            <>
+              Don't have an account?{' '}
+              <span onClick={() => setIsRegistering(true)} className="text-link cursor-pointer">
+                Register
+              </span>
+            </>
+          )}
+        </p>
+        <p className="login-signup-link">
           <Link to="/" className="text-link">
             Go Home
           </Link>

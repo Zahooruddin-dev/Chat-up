@@ -1,6 +1,8 @@
 // src/context/AuthContext.jsx
-// Manages the user's authentication state using React Context and localStorage.
+// Manages the user's authentication state using React Context and Firebase Authentication.
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { auth } from '../firebaseConfig'; // Import our Firebase auth instance
+import { onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 
 // Create the AuthContext. This will hold our authentication state and functions.
 export const AuthContext = createContext(null);
@@ -11,39 +13,54 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true); // Indicates if auth state is being loaded
 
   useEffect(() => {
-    // This effect runs once when the component mounts.
-    // It checks if a user session exists in localStorage.
-    const userFromStorage = localStorage.getItem('chat_agent_user');
-    if (userFromStorage) {
-      try {
-        // Attempt to parse the stored user data.
-        setCurrentUser(JSON.parse(userFromStorage));
-      } catch (e) {
-        // If parsing fails (e.g., corrupted data), log error and clear storage.
-        console.error("Failed to parse user from local storage:", e);
-        localStorage.removeItem('chat_agent_user');
-      }
-    }
-    setLoading(false); // Authentication state has been determined (either logged in or not)
+    // This Firebase listener runs whenever the user's authentication state changes.
+    // It's the most reliable way to get the current user.
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user); // Update the current user in state
+      setLoading(false); // Authentication state has been determined
+    });
+
+    // Cleanup function: unsubscribe from the listener when the component unmounts
+    return () => unsubscribe();
   }, []); // Empty dependency array means this effect runs only once on mount
 
-  // Function to handle user login.
-  // In a real app, this would involve API calls to a backend.
-  const login = (userData) => {
-    setCurrentUser(userData); // Set the current user in state
-    localStorage.setItem('chat_agent_user', JSON.stringify(userData)); // Store user data in localStorage
+  // Function to handle user registration with email and password
+  const register = async (email, password) => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // User is automatically logged in after registration
+      return userCredential.user;
+    } catch (error) {
+      console.error("Firebase registration error:", error);
+      throw error; // Re-throw to be handled by the component calling this function
+    }
   };
 
-  // Function to handle user logout.
-  const logout = () => {
-    setCurrentUser(null); // Clear the current user from state
-    localStorage.removeItem('chat_agent_user'); // Remove user data from localStorage
+  // Function to handle user login with email and password
+  const login = async (email, password) => {
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      return userCredential.user;
+    } catch (error) {
+      console.error("Firebase login error:", error);
+      throw error;
+    }
   };
 
-  // The value prop makes the current user, login, logout, and loading state
+  // Function to handle user logout
+  const logout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Firebase logout error:", error);
+      throw error;
+    }
+  };
+
+  // The value prop makes the current user, login, logout, register, and loading state
   // available to any component that consumes this context.
   return (
-    <AuthContext.Provider value={{ currentUser, login, logout, loading }}>
+    <AuthContext.Provider value={{ currentUser, login, logout, register, loading }}>
       {/* Only render children once the loading state is false (auth check is complete) */}
       {!loading && children}
     </AuthContext.Provider>

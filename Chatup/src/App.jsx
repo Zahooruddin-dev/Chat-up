@@ -6,7 +6,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 // Import our new page components
 import Home from './components/Home';
 import Login from './components/Login';
-import ChatRoom from './components/ChatRoom'; // Will be ChatRoom.jsx later
+import ChatRoom from './components/ChatRoom'; // Changed from Chatbot to ChatRoom
 
 // Import AuthProvider and useAuth from our context
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -40,12 +40,12 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
 
-          {/* Protected route for the ChatRoom (will be chat room) */}
+          {/* Protected route for the chat room */}
           <Route
             path="/chat"
             element={
               <PrivateRoute>
-                <ChatRoom /> {/* This will render our ChatRoom component */}
+                <ChatRoom /> {/* Render our ChatRoom component */}
               </PrivateRoute>
             }
           />

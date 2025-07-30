@@ -15,8 +15,8 @@
   --color-input-border: #4a5568; /* Input border */
   --color-error: #e53e3e; /* Red for error messages */
   --color-success: #38a169; /* Green for success messages */
-  --color-user-bubble: #8b5cf6; /* User message bubble color */
-  --color-bot-bubble: #4a5568; /* Bot message bubble color */
+  --color-user-bubble: #8b5cf6; /* Current user message bubble color (purple) */
+  --color-other-user-bubble: #4a5568; /* Other user message bubble color (darker grey) */
 }
 
 /* Global styles for the entire body */
@@ -266,8 +266,8 @@ body {
   margin-top: 1.5rem; /* 24px */
 }
 
-/* --- Chatbot Page Styles (src/components/Chatbot.jsx) --- */
-.chatbot-main-container {
+/* --- Chat Room Styles (src/components/ChatRoom.jsx) --- */
+.chatbot-main-container { /* Renamed from chatbot-container to chatbot-main-container for clarity */
   display: flex;
   flex-direction: column;
   height: 90vh; /* 90% of viewport height */
@@ -295,11 +295,24 @@ body {
   color: var(--color-primary);
 }
 
-.user-display {
-  font-size: 0.875rem; /* 14px */
-  color: var(--color-text-muted);
+.user-info-display {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end; /* Align text to the right */
   margin-right: 1rem;
 }
+
+.user-email {
+  font-size: 0.875rem; /* 14px */
+  color: var(--color-text-muted);
+}
+
+.user-id {
+  font-size: 0.75rem; /* 12px */
+  color: var(--color-text-muted);
+  opacity: 0.7; /* Slightly faded */
+}
+
 
 .chatbot-messages-display {
   flex: 1; /* Takes up remaining vertical space */
@@ -317,33 +330,51 @@ body {
   border-radius: 0.5rem; /* 8px rounded corners */
   word-wrap: break-word; /* Ensure long words wrap */
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow for bubbles */
+  display: flex;
+  flex-direction: column;
 }
+
+.message-sender {
+  font-size: 0.75rem; /* 12px */
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  opacity: 0.8;
+}
+
+.message-text {
+  font-size: 1rem; /* 16px */
+  line-height: 1.4;
+}
+
+.message-timestamp {
+  font-size: 0.65rem; /* Very small */
+  color: var(--color-text-muted);
+  opacity: 0.6;
+  margin-top: 0.5rem;
+  text-align: right;
+}
+
 
 .user-message {
   align-self: flex-end; /* Align user messages to the right */
-  background-color: var(--color-user-bubble); /* Purple for user messages */
+  background-color: var(--color-user-bubble); /* Purple for current user messages */
   color: var(--color-text-light);
-  border-bottom-right-radius: 0; /* Make bottom-right corner sharp for user */
+  border-bottom-right-radius: 0; /* Make bottom-right corner sharp for current user */
 }
 
-.bot-message {
-  align-self: flex-start; /* Align bot messages to the left */
-  background-color: var(--color-bot-bubble); /* Darker grey for bot messages */
-  color: var(--color-text-light);
-  border-bottom-left-radius: 0; /* Make bottom-left corner sharp for bot */
+.user-message .message-sender {
+  color: rgba(255, 255, 255, 0.9); /* Slightly brighter for sender name */
 }
 
-/* Typing indicator animation */
-.typing-indicator {
-  background-color: var(--color-bot-bubble);
+.other-user-message {
+  align-self: flex-start; /* Align other user messages to the left */
+  background-color: var(--color-other-user-bubble); /* Darker grey for other user messages */
   color: var(--color-text-light);
-  animation: pulse 1.5s infinite ease-in-out; /* Simple pulsing animation */
+  border-bottom-left-radius: 0; /* Make bottom-left corner sharp for other users */
 }
 
-@keyframes pulse {
-  0% { opacity: 0.7; }
-  50% { opacity: 1; }
-  100% { opacity: 0.7; }
+.other-user-message .message-sender {
+  color: rgba(255, 255, 255, 0.7); /* Slightly muted for sender name */
 }
 
 
@@ -416,7 +447,7 @@ body {
 }
 
 
-/* Responsive adjustments for Chatbot page */
+/* Responsive adjustments for Chat Room page */
 @media (max-width: 768px) {
   .chatbot-main-container {
     height: 95vh; /* Take more height on small screens */
@@ -425,8 +456,9 @@ body {
   .chatbot-title {
     font-size: 1.25rem; /* Smaller title on small screens */
   }
-  .user-display {
+  .user-info-display {
     font-size: 0.75rem; /* Smaller text for user display */
+    margin-right: 0.5rem;
   }
   .chatbot-input-area {
     flex-direction: column; /* Stack input and button vertically */

@@ -1,6 +1,6 @@
 // src/components/ChatRoom.jsx
 // This component implements the real-time chat room with a sidebar for private chats,
-// online status, and a real-time message counter.
+// online status, and a real-time unread message counter.
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -15,6 +15,9 @@ import {
   serverTimestamp,
   onSnapshot,
   limit,
+  doc,
+  getDoc,
+  setDoc,
 } from 'firebase/firestore';
 
 // Get the app ID from the global variable (provided by Canvas)
@@ -29,7 +32,8 @@ function ChatRoom() {
   const [messages, setMessages] = useState([]);
   const [users, setUsers] = useState([]);
   const [onlineStatus, setOnlineStatus] = useState({});
-  const [unreadCounts, setUnreadCounts] = useState({}); // NEW: State to store message counts for each chat
+  const [unreadCounts, setUnreadCounts] = useState({});
+  const [lastReadTimestamps, setLastReadTimestamps] = useState({}); // NEW: State to store last read timestamps
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef(null);
@@ -45,7 +49,9 @@ function ChatRoom() {
   const publicMessagesRef = collection(db, `artifacts/${appId}/public/data/messages`);
   const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
   const privateChatMessagesRef = targetUser ? collection(db, `artifacts/${appId}/privateChats/${getPrivateChatId(currentUserId, targetUser.uid)}/messages`) : null;
+  const lastReadRef = collection(db, `artifacts/${appId}/users/${currentUserId}/lastRead`); // NEW: Reference for last read timestamps
 
+  // Effect to scroll to the bottom whenever messages update
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -97,23 +103,41 @@ function ChatRoom() {
     return () => unsubscribe();
   }, [currentUserId]);
 
-  // NEW: Effect to set up listeners for all private chats to get message counts
+  // NEW: Effect to listen for last read timestamps
+  useEffect(() => {
+    if (!currentUserId) return;
+    const unsubscribe = onSnapshot(lastReadRef, (snapshot) => {
+      const timestamps = {};
+      snapshot.docs.forEach(doc => {
+        timestamps[doc.id] = doc.data().timestamp;
+      });
+      setLastReadTimestamps(timestamps);
+    });
+
+    return () => unsubscribe();
+  }, [currentUserId]);
+
+  // NEW: Effect to set up listeners for all private chats to get UNREAD message counts
   useEffect(() => {
     if (!currentUserId || users.length === 0) return;
 
     const unsubscribes = [];
-    const chatCounts = {};
-
     users.forEach(user => {
       const chatId = getPrivateChatId(currentUserId, user.uid);
       const chatRef = collection(db, `artifacts/${appId}/privateChats/${chatId}/messages`);
       const q = query(chatRef);
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
-        chatCounts[chatId] = snapshot.docs.length;
+        // Calculate unread count based on last read timestamp
+        const lastReadTimestamp = lastReadTimestamps[chatId] || 0;
+        const unreadCount = snapshot.docs.filter(doc => {
+          const messageTimestamp = doc.data().timestamp?.toMillis();
+          return messageTimestamp > lastReadTimestamp;
+        }).length;
+
         setUnreadCounts(prevCounts => ({
           ...prevCounts,
-          ...chatCounts,
+          [chatId]: unreadCount,
         }));
       }, (error) => {
         console.error(`Error fetching private chat count for ${user.email}:`, error);
@@ -124,7 +148,7 @@ function ChatRoom() {
     return () => {
       unsubscribes.forEach(unsub => unsub());
     };
-  }, [currentUserId, users]);
+  }, [currentUserId, users, lastReadTimestamps]); // Added lastReadTimestamps dependency
 
   // Effect to set up the real-time listener for the active chat (public or private)
   useEffect(() => {
@@ -213,10 +237,17 @@ function ChatRoom() {
     }
   };
 
-  const handleUserClick = (user) => {
+  const handleUserClick = async (user) => {
     setTargetUser(user);
     setActiveChat(user.uid);
     setMessages([]);
+
+    // NEW: Update the last read timestamp for this chat
+    if (currentUserId && user.uid) {
+      const chatId = getPrivateChatId(currentUserId, user.uid);
+      const lastReadDocRef = doc(db, lastReadRef.path, chatId);
+      await setDoc(lastReadDocRef, { timestamp: Date.now() }, { merge: true });
+    }
   };
 
   const handlePublicChatClick = () => {
@@ -244,7 +275,7 @@ function ChatRoom() {
           {users.length > 0 && users.map((user) => {
             const isOnline = onlineStatus[user.uid]?.state === 'online';
             const chatId = getPrivateChatId(currentUserId, user.uid);
-            const messageCount = unreadCounts[chatId] || 0; // Get the count
+            const messageCount = unreadCounts[chatId] || 0;
             return (
               <div
                 key={user.uid}
@@ -254,7 +285,6 @@ function ChatRoom() {
                 <div className="inbox-item-name">
                     {user.email}
                     <span className={`online-status-indicator ${isOnline ? 'online' : 'offline'}`} />
-                    {/* NEW: Display message count badge */}
                     {messageCount > 0 && (
                         <span className="message-count-badge">{messageCount}</span>
                     )}

@@ -582,4 +582,29 @@ body {
   .chat-message {
     max-width: 90%;
   }
+}/* src/index.css */
+
+/* ... (previous CSS styles) ... */
+
+/* --- Online Status Indicator Styles --- */
+.online-status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-left: 8px;
+  display: inline-block;
+  border: 1px solid var(--color-background-card); /* A subtle border for visibility */
+}
+
+.online-status-indicator.online {
+  background-color: var(--color-success); /* Green for online */
+}
+
+.online-status-indicator.offline {
+  background-color: var(--color-secondary); /* Gray for offline */
+}
+
+.inbox-item-name {
+  display: flex;
+  align-items: center;
 }

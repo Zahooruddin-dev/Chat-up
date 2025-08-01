@@ -1,9 +1,11 @@
 // src/components/ChatRoom.jsx
-// This component implements the real-time chat room with a sidebar for private chats.
+// This component implements the real-time chat room with a sidebar for private chats and online status.
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { db } from '../firebaseConfig';
+import { db, rtdb } from '../firebaseConfig'; // NEW: Import the Realtime Database instance
+import { ref, onValue, set, onDisconnect } from 'firebase/database'; // NEW: Import Realtime Database functions
 import {
   collection,
   query,
@@ -15,18 +17,17 @@ import {
 } from 'firebase/firestore';
 
 // Get the app ID from the global variable (provided by Canvas)
-// Fallback to a default if running outside Canvas for local testing
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-chat-app';
 
 // Function to generate a consistent chat ID for two users, regardless of who initiated the chat.
 const getPrivateChatId = (user1Id, user2Id) => {
-  // Sort the UIDs alphabetically to create a consistent chat ID
   return [user1Id, user2Id].sort().join('_');
 };
 
 function ChatRoom() {
   const [messages, setMessages] = useState([]);
   const [users, setUsers] = useState([]);
+  const [onlineStatus, setOnlineStatus] = useState({}); // NEW: State to store user online status
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef(null);
@@ -40,14 +41,50 @@ function ChatRoom() {
 
   // Collection references
   const publicMessagesRef = collection(db, `artifacts/${appId}/public/data/messages`);
-  // CORRECTED PATH FOR USERS
   const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
   const privateChatMessagesRef = targetUser ? collection(db, `artifacts/${appId}/privateChats/${getPrivateChatId(currentUserId, targetUser.uid)}/messages`) : null;
 
+  // Effect to scroll to the bottom whenever messages update
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
+  // Effect to set up the Realtime Database presence system
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    // The path in the Realtime Database for the user's status
+    const userStatusDatabaseRef = ref(rtdb, `status/${currentUserId}`);
+    // The path where we'll listen for all user statuses
+    const allUsersStatusRef = ref(rtdb, 'status');
+
+    // Set user's status to 'online'
+    const isOnlineForRTDB = {
+        state: 'online',
+        last_changed: Date.now(),
+    };
+    set(userStatusDatabaseRef, isOnlineForRTDB);
+
+    // Set up a listener for when the user disconnects
+    onDisconnect(userStatusDatabaseRef).set({
+        state: 'offline',
+        last_changed: Date.now(),
+    });
+
+    // Listen for changes to all user statuses and update the state
+    const unsubscribeStatus = onValue(allUsersStatusRef, (snapshot) => {
+        const statuses = snapshot.val() || {};
+        setOnlineStatus(statuses);
+    });
+
+    // Cleanup function to remove listeners
+    return () => {
+        // We don't remove the onDisconnect listener because we want it to fire even if the component unmounts
+        unsubscribeStatus();
+    };
+  }, [currentUserId]);
+
+  // Effect to set up the real-time listener for the user list (Firestore)
   useEffect(() => {
     if (!currentUserId) return;
 
@@ -58,6 +95,7 @@ function ChatRoom() {
         id: doc.id,
         ...doc.data(),
       }));
+      // Filter out the current user and sort them by email
       setUsers(fetchedUsers.filter(user => user.uid !== currentUserId));
     }, (error) => {
       console.error("Error fetching users:", error);
@@ -66,6 +104,7 @@ function ChatRoom() {
     return () => unsubscribe();
   }, [currentUserId]);
 
+  // Effect to set up the real-time listener for the active chat (public or private)
   useEffect(() => {
     if (!currentUserId) return;
 
@@ -142,6 +181,9 @@ function ChatRoom() {
 
   const handleLogout = async () => {
     try {
+      // Set the user's status to offline on logout
+      const userStatusDatabaseRef = ref(rtdb, `status/${currentUserId}`);
+      await set(userStatusDatabaseRef, { state: 'offline', last_changed: Date.now() });
       await logout();
       navigate('/login');
     } catch (error) {
@@ -164,6 +206,7 @@ function ChatRoom() {
 
   return (
     <div className="chat-app-container">
+      {/* Sidebar for Inboxes */}
       <div className="chat-inbox-sidebar">
         <div className="sidebar-header">
           <h2 className="sidebar-title">Inboxes</h2>
@@ -172,27 +215,38 @@ function ChatRoom() {
           </button>
         </div>
         <div className="sidebar-inbox-list">
+          {/* Public Chat Button */}
           <div
             className={`inbox-item ${activeChat === 'public' ? 'active' : ''}`}
             onClick={handlePublicChatClick}
           >
             <div className="inbox-item-name">Public Chat Room</div>
           </div>
-          {users.length > 0 && users.map((user) => (
-            <div
-              key={user.uid}
-              className={`inbox-item ${activeChat === user.uid ? 'active' : ''}`}
-              onClick={() => handleUserClick(user)}
-            >
-              <div className="inbox-item-name">{user.email}</div>
-            </div>
-          ))}
+          {/* List of other users for private chats */}
+          {users.length > 0 && users.map((user) => {
+            const isOnline = onlineStatus[user.uid]?.state === 'online'; // Check online status
+            return (
+              <div
+                key={user.uid}
+                className={`inbox-item ${activeChat === user.uid ? 'active' : ''}`}
+                onClick={() => handleUserClick(user)}
+              >
+                <div className="inbox-item-name">
+                    {user.email}
+                    {/* NEW: Online/Offline indicator */}
+                    <span className={`online-status-indicator ${isOnline ? 'online' : 'offline'}`} />
+                </div>
+              </div>
+            );
+          })}
           {users.length === 0 && (
             <p className="inbox-placeholder">No other users online. Invite a friend!</p>
           )}
         </div>
       </div>
+      {/* Main Chat Area */}
       <div className="chatbot-main-container">
+        {/* Chat Header */}
         <div className="chatbot-header">
           <h1 className="chatbot-title">
             {activeChat === 'public' ? 'Public Chat Room' : `Chatting with ${targetUser?.email}`}
@@ -203,6 +257,7 @@ function ChatRoom() {
             </div>
           )}
         </div>
+        {/* Messages Display Area */}
         <div className="chatbot-messages-display custom-scrollbar">
           {messages.length === 0 && currentUserId && (
             <p className="chatbot-placeholder-message">
@@ -235,6 +290,7 @@ function ChatRoom() {
           ))}
           <div ref={messagesEndRef} />
         </div>
+        {/* Input Area */}
         <div className="chatbot-input-area">
           <input
             type="text"

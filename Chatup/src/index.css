@@ -608,3 +608,15 @@ body {
   display: flex;
   align-items: center;
 }
+/* --- Message Count Badge Styles --- */
+.message-count-badge {
+  background-color: var(--color-accent); /* Use a vibrant accent color */
+  color: var(--color-text-on-accent); /* Ensure good contrast */
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 12px; /* A rounded pill shape */
+  margin-left: auto; /* Push it to the far right */
+  min-width: 20px; /* Ensure a minimum size for single digits */
+  text-align: center;
+}

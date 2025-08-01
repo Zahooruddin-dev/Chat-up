@@ -1,11 +1,12 @@
 // src/components/ChatRoom.jsx
-// This component implements the real-time chat room with a sidebar for private chats and online status.
+// This component implements the real-time chat room with a sidebar for private chats,
+// online status, and a real-time message counter.
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { db, rtdb } from '../firebaseConfig'; // NEW: Import the Realtime Database instance
-import { ref, onValue, set, onDisconnect } from 'firebase/database'; // NEW: Import Realtime Database functions
+import { db, rtdb } from '../firebaseConfig';
+import { ref, onValue, set, onDisconnect } from 'firebase/database';
 import {
   collection,
   query,
@@ -27,7 +28,8 @@ const getPrivateChatId = (user1Id, user2Id) => {
 function ChatRoom() {
   const [messages, setMessages] = useState([]);
   const [users, setUsers] = useState([]);
-  const [onlineStatus, setOnlineStatus] = useState({}); // NEW: State to store user online status
+  const [onlineStatus, setOnlineStatus] = useState({});
+  const [unreadCounts, setUnreadCounts] = useState({}); // NEW: State to store message counts for each chat
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef(null);
@@ -44,7 +46,6 @@ function ChatRoom() {
   const usersCollectionRef = collection(db, `artifacts/${appId}/public/data/users`);
   const privateChatMessagesRef = targetUser ? collection(db, `artifacts/${appId}/privateChats/${getPrivateChatId(currentUserId, targetUser.uid)}/messages`) : null;
 
-  // Effect to scroll to the bottom whenever messages update
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -53,33 +54,26 @@ function ChatRoom() {
   useEffect(() => {
     if (!currentUserId) return;
 
-    // The path in the Realtime Database for the user's status
     const userStatusDatabaseRef = ref(rtdb, `status/${currentUserId}`);
-    // The path where we'll listen for all user statuses
     const allUsersStatusRef = ref(rtdb, 'status');
 
-    // Set user's status to 'online'
     const isOnlineForRTDB = {
         state: 'online',
         last_changed: Date.now(),
     };
     set(userStatusDatabaseRef, isOnlineForRTDB);
 
-    // Set up a listener for when the user disconnects
     onDisconnect(userStatusDatabaseRef).set({
         state: 'offline',
         last_changed: Date.now(),
     });
 
-    // Listen for changes to all user statuses and update the state
     const unsubscribeStatus = onValue(allUsersStatusRef, (snapshot) => {
         const statuses = snapshot.val() || {};
         setOnlineStatus(statuses);
     });
 
-    // Cleanup function to remove listeners
     return () => {
-        // We don't remove the onDisconnect listener because we want it to fire even if the component unmounts
         unsubscribeStatus();
     };
   }, [currentUserId]);
@@ -95,7 +89,6 @@ function ChatRoom() {
         id: doc.id,
         ...doc.data(),
       }));
-      // Filter out the current user and sort them by email
       setUsers(fetchedUsers.filter(user => user.uid !== currentUserId));
     }, (error) => {
       console.error("Error fetching users:", error);
@@ -103,6 +96,35 @@ function ChatRoom() {
 
     return () => unsubscribe();
   }, [currentUserId]);
+
+  // NEW: Effect to set up listeners for all private chats to get message counts
+  useEffect(() => {
+    if (!currentUserId || users.length === 0) return;
+
+    const unsubscribes = [];
+    const chatCounts = {};
+
+    users.forEach(user => {
+      const chatId = getPrivateChatId(currentUserId, user.uid);
+      const chatRef = collection(db, `artifacts/${appId}/privateChats/${chatId}/messages`);
+      const q = query(chatRef);
+
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        chatCounts[chatId] = snapshot.docs.length;
+        setUnreadCounts(prevCounts => ({
+          ...prevCounts,
+          ...chatCounts,
+        }));
+      }, (error) => {
+        console.error(`Error fetching private chat count for ${user.email}:`, error);
+      });
+      unsubscribes.push(unsubscribe);
+    });
+
+    return () => {
+      unsubscribes.forEach(unsub => unsub());
+    };
+  }, [currentUserId, users]);
 
   // Effect to set up the real-time listener for the active chat (public or private)
   useEffect(() => {
@@ -181,7 +203,6 @@ function ChatRoom() {
 
   const handleLogout = async () => {
     try {
-      // Set the user's status to offline on logout
       const userStatusDatabaseRef = ref(rtdb, `status/${currentUserId}`);
       await set(userStatusDatabaseRef, { state: 'offline', last_changed: Date.now() });
       await logout();
@@ -206,7 +227,6 @@ function ChatRoom() {
 
   return (
     <div className="chat-app-container">
-      {/* Sidebar for Inboxes */}
       <div className="chat-inbox-sidebar">
         <div className="sidebar-header">
           <h2 className="sidebar-title">Inboxes</h2>
@@ -215,16 +235,16 @@ function ChatRoom() {
           </button>
         </div>
         <div className="sidebar-inbox-list">
-          {/* Public Chat Button */}
           <div
             className={`inbox-item ${activeChat === 'public' ? 'active' : ''}`}
             onClick={handlePublicChatClick}
           >
             <div className="inbox-item-name">Public Chat Room</div>
           </div>
-          {/* List of other users for private chats */}
           {users.length > 0 && users.map((user) => {
-            const isOnline = onlineStatus[user.uid]?.state === 'online'; // Check online status
+            const isOnline = onlineStatus[user.uid]?.state === 'online';
+            const chatId = getPrivateChatId(currentUserId, user.uid);
+            const messageCount = unreadCounts[chatId] || 0; // Get the count
             return (
               <div
                 key={user.uid}
@@ -233,8 +253,11 @@ function ChatRoom() {
               >
                 <div className="inbox-item-name">
                     {user.email}
-                    {/* NEW: Online/Offline indicator */}
                     <span className={`online-status-indicator ${isOnline ? 'online' : 'offline'}`} />
+                    {/* NEW: Display message count badge */}
+                    {messageCount > 0 && (
+                        <span className="message-count-badge">{messageCount}</span>
+                    )}
                 </div>
               </div>
             );
@@ -244,9 +267,7 @@ function ChatRoom() {
           )}
         </div>
       </div>
-      {/* Main Chat Area */}
       <div className="chatbot-main-container">
-        {/* Chat Header */}
         <div className="chatbot-header">
           <h1 className="chatbot-title">
             {activeChat === 'public' ? 'Public Chat Room' : `Chatting with ${targetUser?.email}`}
@@ -257,7 +278,6 @@ function ChatRoom() {
             </div>
           )}
         </div>
-        {/* Messages Display Area */}
         <div className="chatbot-messages-display custom-scrollbar">
           {messages.length === 0 && currentUserId && (
             <p className="chatbot-placeholder-message">
@@ -290,7 +310,6 @@ function ChatRoom() {
           ))}
           <div ref={messagesEndRef} />
         </div>
-        {/* Input Area */}
         <div className="chatbot-input-area">
           <input
             type="text"

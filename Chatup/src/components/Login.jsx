@@ -2,32 +2,57 @@
 // User login component with Firebase Authentication integration.
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext'; // Import useAuth hook
+import { useAuth } from '../context/AuthContext';
+import { db } from '../firebaseConfig';
+import { doc, setDoc, getDoc } from 'firebase/firestore'; // Import getDoc
 
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false); // State to toggle between login/register form
-  const { login, register } = useAuth(); // Get login and register functions from AuthContext
+  const [isRegistering, setIsRegistering] = useState(false);
+  const { login, register } = useAuth();
   const navigate = useNavigate();
+  const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-chat-app';
+
+  // Function to create a user profile document in Firestore, but only if it doesn't already exist
+  const createUserProfile = async (user) => {
+    try {
+      // CORRECTED PATH: /artifacts/{appId}/public/data/users/{userId}
+      const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, user.uid);
+      const docSnap = await getDoc(userDocRef);
+
+      if (!docSnap.exists()) {
+        await setDoc(userDocRef, {
+          uid: user.uid,
+          email: user.email,
+          createdAt: new Date(),
+          // You can add more profile fields here if needed (e.g., displayName)
+        });
+        console.log("New user profile created successfully for:", user.email);
+      } else {
+        console.log("User profile already exists for:", user.email);
+      }
+    } catch (e) {
+      console.error("Error creating user profile:", e);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); // Clear any previous error messages
+    setError('');
 
     try {
       if (isRegistering) {
-        // Attempt to register the user
-        await register(email, password);
-        alert('Registration successful! You are now logged in.'); // Simple alert for success
+        const user = await register(email, password);
+        await createUserProfile(user); // Call the function to create a profile
+        alert('Registration successful! You are now logged in.');
       } else {
-        // Attempt to log in the user
-        await login(email, password);
+        const user = await login(email, password);
+        await createUserProfile(user); // Call the function to ensure a profile exists on login too
       }
-      navigate('/chat'); // Redirect to the chat page upon successful login/registration
+      navigate('/chat');
     } catch (err) {
-      // Handle Firebase authentication errors
       let errorMessage = 'An unexpected error occurred. Please try again.';
       if (err.code) {
         switch (err.code) {

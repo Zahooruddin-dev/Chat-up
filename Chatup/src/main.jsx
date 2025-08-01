@@ -7,7 +7,7 @@ import './index.css'; // Import our global styles
 
 // Render the React application into the 'root' div in index.html
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+	<React.StrictMode>
+		<App />
+	</React.StrictMode>
 );
